@@ -1,86 +1,19 @@
 import socket
 import json
 
-HOST = "127.0.0.1"  # The server's hostname or IP address
-PORT = 65432  # The port used by the server
+def stablish_communication(room_name):
+    HOST = "127.0.0.1"  # The server's hostname or IP address
+    PORT = 65432  # The port used by the server
 
-json_ex = {
-    "outputs": [
-        {
-            "type": "lampada",
-            "tag": "Lâmpada 01",
-            "gpio": 18,
-            "value": 1
-        },
-        {
-            "type": "lampada",
-            "tag": "Lâmpada 02",
-            "gpio": 23,
-        },
-        {
-            "type": "projetor",
-            "tag": "Projetor Multimidia",
-            "gpio": 25,
-        },
-        {
-            "type": "ar-condicionado",
-            "tag": "Ar-Condicionado (1º Andar)",
-            "gpio": 24,
-        },
-        {
-            "type": "alarme",
-            "tag": "Sirene do Alarme",
-            "gpio": 8,
-        }
-    ],
-    "inputs": [
-        {
-            "type": "presenca",
-            "tag": "Sensor de Presença",
-            "gpio": 7,
-        },
-        {
-            "type": "fumaca",
-            "tag": "Sensor de Fumaça",
-            "gpio": 1,
-        },
-        {
-            "type": "janela",
-            "tag": "Sensor de Janela",
-            "gpio": 12,
-        },
-        {
-            "type": "porta",
-            "tag": "Sensor de Porta",
-            "gpio": 16,
-        },
-        {
-            "type": "contagem",
-            "tag": "Sensor de Contagem de Pessoas Entrada",
-            "gpio": 20,
-            "value": 1
-        },
-        {
-            "type": "contagem",
-            "tag": "Sensor de Contagem de Pessoas Saída",
-            "gpio": 21,
-            "value": 1
-        }
-    ],
-    "sensor_temperatura":[
-        {
-        "type": "dth22",
-        "tag": "Sensor de Temperatura e Umidade",
-        "gpio": 4,
-        "value": 1
-        }
-    ]
-}
+    com_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    com_socket.connect((HOST, PORT))
+    com_socket.sendall(bytes(room_name, encoding='utf-8'))
+    return com_socket
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.connect((HOST, PORT))
-    #for _ in range(3):
-    s.sendall(bytes(json.dumps(json_ex), 'utf-8'))
-    data = s.recv(1024)
+def send_data_to_central(com_socket, data):
+    com_socket.sendall(bytes(json.dumps(data)), encoding='utf-8')
+    print(f"Send {data!r}")
 
-print(f"Received {data!r}")
+def receive_data_from_central(com_socket):
+    data = com_socket.recv(1024)
+    return data
