@@ -43,7 +43,6 @@ class Dist:
     
     def listen_to_inputs(self, com_socket):
         for item in self.inputs:
-            GPIO.add_event_detect(item['gpio'], GPIO.RISING)
             item['value'] = GPIO.input(item['gpio'])
             thread_send = threading.Thread(target=self.pub_to_central, args=(com_socket, item))
             thread_send.start()
@@ -52,13 +51,22 @@ class Dist:
             for item in self.inputs:
                 if GPIO.input(item['gpio']) != item['value']:
                     item['value'] = GPIO.input(item['gpio'])
-                    thread_send = threading.Thread(target=self.pub_to_central, args=(com_socket, item))
-                    thread_send.start()
-                    print(threading.activeCount())
+                    
+                    if item['tag'] == "Sensor de Contagem de Pessoas Entrada":
+                        self.total_people += 1
 
-            time.sleep(0.5)
+                    elif item['tag'] == "Sensor de Contagem de Pessoas Saída":
+                        self.total_people -= 1
+                    
+                    else:
+                        thread_send = threading.Thread(target=self.pub_to_central, args=(com_socket, item))
+                        thread_send.start()
+            
+            time.sleep(0.1)
 
     def pub_to_central(self, socket, data):
+        data['people_in_room'] = self.total_people
+        data['room_name'] = self.room_name
         send_data_to_central(socket, data)
 
 

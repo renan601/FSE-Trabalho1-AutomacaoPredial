@@ -5,11 +5,13 @@ import threading
 
 class Central:
     def __init__(self, conf_file):
-        self.outputs = conf_file["outputs"]
-        self.inputs = conf_file["inputs"]
-        self.temperature_sensor = conf_file["sensor_temperatura"]
-
+        self.conf_file = conf_file
+        self.people_in_room = 0
         self.client_data = []
+        self.outputs = []
+        self.inputs = []
+        self.temperature_sensor = []
+        self.client_rooms = {}
 
         self.connect_to_clients()
         
@@ -25,6 +27,11 @@ class Central:
         for i in range(dist_count):
             com_socket, client_addr, client_room = stablish_communication()
             self.client_data.append((client_room, com_socket, client_addr))
+            self.client_rooms[client_room] = len(self.client_data) - 1
+            
+            self.outputs.append(self.conf_file["outputs"])
+            self.inputs.append(self.conf_file["inputs"])
+            self.temperature_sensor.append(self.conf_file["sensor_temperatura"])
     
     def listen_to_client(self, com_socket):
         possible_types = {
@@ -46,20 +53,23 @@ class Central:
 
         while True:
             data = receive_data_from_client(com_socket)
+            room_name = data['room_name']
+            room_position_on_list = self.client_rooms.get(room_name)
             
             for key, value in possible_types.items():
                 if data['tag'] == key:
                     if value < 10:
-                        self.outputs[value]['value'] = data['value']
+                        self.outputs[room_position_on_list][value]['value'] = data['value']
                     elif value < 20:
-                        self.inputs[value-10]['value'] = data['value']
+                        self.inputs[room_position_on_list][value-10]['value'] = data['value']
+                        self.people_in_room = data['people_in_room']
                     elif value < 30:
-                        self.temperature_sensor[value-20]['value'] = data['value']
+                        self.temperature_sensor[room_position_on_list][value-20]['value'] = data['value']
 
     def main_menu(self):
         menu = {}
         
-        for j, item_output in enumerate(self.outputs):
+        for j, item_output in enumerate(self.outputs[0]):
             menu[j] = (f"Ligar/Desligar {item_output['tag']}")
         
         while True:
@@ -71,7 +81,8 @@ class Central:
                 self.display()
                 print("\n")
             elif action == 2:
-                self.control_menu(menu)
+                room = self.room_control()
+                self.control_menu(room, menu)
                 print("\n")
             else:
                 exit()
@@ -82,19 +93,43 @@ class Central:
             print(self.inputs)
             print(f"Sistema {self.client_data[i][0]}")
 
-            for item_output in self.outputs:
+            for item_output in self.outputs[i]:
                 print(f"Valor {item_output['tag']}: {item_output['value']}")
             
-            for item_input in self.inputs:
-                print(f"Valor {item_input['tag']}: {item_input.get('value', 'Não Identificado')} ")
+            for item_input in self.inputs[i]:
+                if item_input['type'] != 'contagem':
+                    print(f"Valor {item_input['tag']}: {item_input.get('value', 'Não Identificado')} ")
+            
+            print(f"People in room: {self.people_in_room}")
             
             #for temp_sensor in self.temperature_sensor:
                 #print(f"Valor {temp_sensor['tag']}: {temp_sensor.get('value', 'Não Identificado')}")
-        
+
+            print(f"People in the building: {self.people_in_room}")
+
         time.sleep(4)
         return
 
-    def control_menu(self, menu):
+    def room_control(self):
+        print("Deseja acionar um dispositivo em qual das salas:")
+        for key, value in self.client_rooms.items():
+            print (value, '--', key)
+
+        print(f"{len(self.client_rooms)} -- Acionar dispositivo no prédio")
+
+        while True:
+            try:
+                option = int(input('Escolha uma das opções acima \n'))
+                if option >= 0 and option <= len(self.client_rooms):
+                    break
+                else:
+                    print(f'Digite um número entre 0 e {len(self.client_rooms)}')
+            except:
+                print('Opção inválida. Digite um número')
+        
+        return option
+    
+    def control_menu(self, room, menu):
         for key in menu.keys():
             print (key, '--', menu[key])
         
@@ -106,13 +141,13 @@ class Central:
             print('Opção inválida. Digite um número')
 
         if option == 0:
-            self.modify_device_status(option)
+            self.modify_device_status(option, room)
         elif option == 1:
-            self.modify_device_status(option)
+            self.modify_device_status(option, room)
         elif option == 2:
-            self.modify_device_status(option)
+            self.modify_device_status(option, room)
         elif option == 3:
-            self.modify_device_status(option)
+            self.modify_device_status(option, room)
         elif option == 4:
             self.modify_system_alarm_status()
         elif option == 5:
@@ -134,13 +169,12 @@ class Central:
             print("Valor inválido")
             return -1
 
-    def modify_device_status(self, option):
+    def modify_device_status(self, option, room):
         value = self.turn_on_turn_off()
         if value != -1:
-            self.outputs[option]['value'] = value
-            print(option)
-            print(self.outputs[option])
-            send_data_to_client(self.outputs[option], self.client_data[0][1], self.client_data[0][2])
+            self.outputs[room][option]['value'] = value
+            print(self.outputs[room][option])
+            send_data_to_client(self.outputs[room][option], self.client_data[room][1], self.client_data[room][2])
 
     def modify_system_alarm_status(self):
         pass
