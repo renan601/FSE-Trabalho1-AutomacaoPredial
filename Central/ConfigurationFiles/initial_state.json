@@ -1,41 +1,41 @@
 {
-    "ip_servidor_central": "192.168.0.53",
-    "porta_servidor_central": 10000,
-    "ip_servidor_distribuido": "192.168.0.52",
-    "porta_servidor_distribuido": 10200,
-    "nome": "Sala 01",
     "outputs": [
         {
             "type": "lampada",
             "tag": "Lâmpada 01",
-            "gpio": 18
+            "gpio": 18,
+            "value": false
         },
         {
             "type": "lampada",
             "tag": "Lâmpada 02",
-            "gpio": 23
+            "gpio": 23,
+            "value": false
         },
         {
             "type": "projetor",
             "tag": "Projetor Multimidia",
-            "gpio": 25
+            "gpio": 25,
+            "value": false
         },
         {
             "type": "ar-condicionado",
             "tag": "Ar-Condicionado (1º Andar)",
-            "gpio": 24
+            "gpio": 24,
+            "value": false
         },
         {
             "type": "alarme",
             "tag": "Sirene do Alarme",
-            "gpio": 8
+            "gpio": 8,
+            "value": false
         }
     ],
     "inputs": [
         {
-          "type": "presenca",
-          "tag": "Sensor de Presença",
-          "gpio": 7
+            "type": "presenca",
+            "tag": "Sensor de Presença",
+            "gpio": 7
         },
         {
             "type": "fumaca",
@@ -65,9 +65,9 @@
     ],
     "sensor_temperatura":[
         {
-          "type": "dth22",
-          "tag": "Sensor de Temperatura e Umidade",
-          "gpio": 4
+            "type": "dth22",
+            "tag": "Sensor de Temperatura e Umidade",
+            "gpio": 4
         }
     ]
 }

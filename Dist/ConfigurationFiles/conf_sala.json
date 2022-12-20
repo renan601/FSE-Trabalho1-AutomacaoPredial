@@ -1,8 +1,8 @@
 {
     "ip_servidor_central": "192.168.0.53",
-    "porta_servidor_central": 10000,
+    "porta_servidor_central": 10062,
     "ip_servidor_distribuido": "192.168.0.52",
-    "porta_servidor_distribuido": 10200,
+    "porta_servidor_distribuido": 10063,
     "nome": "Sala 01",
     "outputs": [
         {
@@ -33,9 +33,9 @@
     ],
     "inputs": [
         {
-          "type": "presenca",
-          "tag": "Sensor de Presença",
-          "gpio": 7
+            "type": "presenca",
+            "tag": "Sensor de Presença",
+            "gpio": 7
         },
         {
             "type": "fumaca",
@@ -51,6 +51,13 @@
             "type": "porta",
             "tag": "Sensor de Porta",
             "gpio": 16
+        }
+    ],
+    "sensor_temperatura":[
+        {
+          "type": "dth22",
+          "tag": "Sensor de Temperatura e Umidade",
+          "gpio": 4
         },
         {
             "type": "contagem",
@@ -61,13 +68,6 @@
             "type": "contagem",
             "tag": "Sensor de Contagem de Pessoas Saída",
             "gpio": 21
-        }
-    ],
-    "sensor_temperatura":[
-        {
-          "type": "dth22",
-          "tag": "Sensor de Temperatura e Umidade",
-          "gpio": 4
         }
     ]
 }
