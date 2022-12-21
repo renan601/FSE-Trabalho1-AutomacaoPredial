@@ -1,18 +1,19 @@
-import os, json
-import socket
 import RPi.GPIO as GPIO
-
-import random
 import threading
 
-import time
-
-from control import control_output_devices
-from com import stablish_communication, send_data_to_central, receive_data_from_central
+from temperature_humidity import read_temp_humidity
+from setup import setup
+from control_inputs_outputs import control_output_devices, listen_to_inputs
+from comunication import stablish_communication, send_data_to_central, receive_data_from_central
 
 class Dist:
     def __init__(self, conf_file):
-        self.room_name = conf_file['nome']
+        self.conf_file = conf_file
+        
+        self.address = conf_file["ip_servidor_distribuido"]
+        self.port = conf_file["porta_servidor_distribuido"]
+        
+        self.room_name = conf_file["nome"]
         self.outputs = conf_file["outputs"]
         self.inputs = conf_file["inputs"]
         self.temperature_sensor = conf_file["sensor_temperatura"]
@@ -38,51 +39,28 @@ class Dist:
     def listen_to_central(self, com_socket):
         while True:
             data = receive_data_from_central(com_socket)
-            control_output_devices(data)
-            print(data)
-    
-    def listen_to_inputs(self, com_socket):
-        for item in self.inputs:
-            item['value'] = GPIO.input(item['gpio'])
-            thread_send = threading.Thread(target=self.pub_to_central, args=(com_socket, item))
-            thread_send.start()
-
-        while True:
-            for item in self.inputs:
-                if GPIO.input(item['gpio']) != item['value']:
-                    item['value'] = GPIO.input(item['gpio'])
-                    
-                    if item['tag'] == "Sensor de Contagem de Pessoas Entrada":
-                        self.total_people += 1
-
-                    elif item['tag'] == "Sensor de Contagem de Pessoas Saída":
-                        self.total_people -= 1
-                    
-                    else:
-                        thread_send = threading.Thread(target=self.pub_to_central, args=(com_socket, item))
-                        thread_send.start()
+            status = control_output_devices(data)
+            data['status'] = status
             
-            time.sleep(0.1)
+            thread_confirm = threading.Thread(target=self.pub_to_central, args=(com_socket, data))
+            thread_confirm.start()
 
     def pub_to_central(self, socket, data):
-        data['people_in_room'] = self.total_people
         data['room_name'] = self.room_name
+        data['people_in_room'] = self.total_people
         send_data_to_central(socket, data)
 
-
-f = open('ConfigurationFiles/conf_sala.json')
-data = json.load(f)
-f.close()
+data = setup()
 
 dist = Dist(data)
 
-com_socket = stablish_communication(dist.room_name)
+com_socket = stablish_communication(dist.room_name, dist.conf_file)
 
 thread_listen = threading.Thread(target=dist.listen_to_central, args=(com_socket, ))
 thread_listen.start()
 
-thread_listen_inputs = threading.Thread(target=dist.listen_to_inputs, args=(com_socket, ))
+thread_listen_inputs = threading.Thread(target=listen_to_inputs, args=(com_socket, dist, ))
 thread_listen_inputs.start()
-    
-#dist.temperature_sensor[0]['value'] = random.randint(1, 40)
-#send_data_to_central(com_socket, dist.temperature_sensor[0])
+
+thread_listen_temperature = threading.Thread(target=read_temp_humidity, args=(com_socket, dist, ))
+thread_listen_temperature.start()

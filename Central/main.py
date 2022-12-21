@@ -1,37 +1,69 @@
-from com import stablish_communication, send_data_to_client, receive_data_from_client
-import json
 import time
 import threading
+import signal
+import json
+
+from comunication import stablish_communication, receive_data_from_client
+from trigger_alarm import trigger_fire_alarm, trigger_system_alarm, trigger_lights
+from building_control import building_control
+from room_control import room_control, control_menu
+from utils import correct_input
 
 class Central:
-    def __init__(self, conf_file):
-        self.conf_file = conf_file
-        self.people_in_room = 0
+    def __init__(self):
+        self.people_in_room = []
+        self.people_in_building = 0
+        
         self.client_data = []
         self.outputs = []
         self.inputs = []
         self.temperature_sensor = []
         self.client_rooms = {}
 
-        self.connect_to_clients()
+        self.alarm_system = False
+        self.fire_alarm = False
+
+        self.prepare_to_connect()
         
         for item in self.client_data:
+            item[1].sendall((bytes("Sucesso", encoding='utf-8')))
             thread_listen = threading.Thread(target=self.listen_to_client, args=(item[1], ))
             thread_listen.start()
 
         self.main_menu()
     
-    def connect_to_clients(self):
+    def prepare_to_connect(self):
         dist_count = int(input('Quantos servidores distribuidos serão conectados? \n'))
-
+        self.connect_to_clients(dist_count)
+        
+    def connect_to_clients(self, dist_count):
+        f = open('ConfigurationFiles/conf.json')
+        raspberrys = json.load(f)
+        f.close()
+        
         for i in range(dist_count):
-            com_socket, client_addr, client_room = stablish_communication()
+            print()
+            print("Qual placa será conectada ?")
+            for key_count, key in enumerate(raspberrys.keys()):
+                print(f"{key_count} -- {key}")
+            
+            choosen_raspberry = correct_input(0, 3)
+            
+            print("Em qual porta?")
+            port = correct_input(1000, 64000)
+            print()
+            
+            com_socket, client_addr, client_room, outputs, inputs, temp_sensor = stablish_communication(list(raspberrys.values())[choosen_raspberry], port)
             self.client_data.append((client_room, com_socket, client_addr))
             self.client_rooms[client_room] = len(self.client_data) - 1
             
-            self.outputs.append(self.conf_file["outputs"])
-            self.inputs.append(self.conf_file["inputs"])
-            self.temperature_sensor.append(self.conf_file["sensor_temperatura"])
+            self.outputs.append(outputs)
+            self.inputs.append(inputs)
+            self.temperature_sensor.append(temp_sensor)
+            self.people_in_room.append(0)
+
+            print(f"Conectado ao servidor correspondente a {client_room} \n")
+    
     
     def listen_to_client(self, com_socket):
         possible_types = {
@@ -55,6 +87,9 @@ class Central:
             data = receive_data_from_client(com_socket)
             room_name = data['room_name']
             room_position_on_list = self.client_rooms.get(room_name)
+
+            if data.get('status', False) == True:
+                print(f"Ação em {data['tag']} da sala {data['room_name']} realizada com sucesso")
             
             for key, value in possible_types.items():
                 if data['tag'] == key:
@@ -62,129 +97,84 @@ class Central:
                         self.outputs[room_position_on_list][value]['value'] = data['value']
                     elif value < 20:
                         self.inputs[room_position_on_list][value-10]['value'] = data['value']
-                        self.people_in_room = data['people_in_room']
-                    elif value < 30:
-                        self.temperature_sensor[room_position_on_list][value-20]['value'] = data['value']
+                        self.people_in_room[room_position_on_list] = data.get('people_in_room')
+                        self.people_in_building = sum(self.people_in_room)
+                        
+                        trigger_fire_alarm(data, self.fire_alarm, self.client_rooms, self.client_data, self.outputs)
+                        trigger_system_alarm(data, self.alarm_system, self.client_rooms, self.client_data, self.outputs)
+                        trigger_lights(data, self.alarm_system, room_position_on_list, self.client_data, self.outputs)
 
+                    elif value < 30:
+                        self.temperature_sensor[room_position_on_list][value-20]['temp'] = data['temp']
+                        self.temperature_sensor[room_position_on_list][value-20]['humidity'] = data['humidity']
+
+    
     def main_menu(self):
         menu = {}
         
         for j, item_output in enumerate(self.outputs[0]):
-            menu[j] = (f"Ligar/Desligar {item_output['tag']}")
+            if item_output['type'] != 'alarme':
+                menu[j] = (f"Ligar/Desligar {item_output['tag']}")
         
         while True:
             print("1 - Visualizar estado do sistema.")
-            print("2 - Alterar estado do sistema.")
+            print("2 - Acionar/Desligar dispositivos em uma sala.")
+            print("3 - Acionar/Desligar dispositivos no prédio.")
+            print("4 - Interromper o programa.")
             action = int(input("Escolha uma das opções acima. \n"))
             
             if action == 1:
-                self.display()
-                print("\n")
+                try:
+                    self.display()
+                except:
+                    print("\n")
+                    continue
             elif action == 2:
-                room = self.room_control()
-                self.control_menu(room, menu)
+                room = room_control(self)
+                control_menu(self, room, menu)
                 print("\n")
+            elif action == 3:
+                building_control(self)
             else:
                 exit()
 
-
     def display(self):
-        for i in range(len(self.client_data)):
-            print(self.inputs)
-            print(f"Sistema {self.client_data[i][0]}")
+        def handler_signal(signum, frame):
+            raise Exception
 
-            for item_output in self.outputs[i]:
-                print(f"Valor {item_output['tag']}: {item_output['value']}")
-            
-            for item_input in self.inputs[i]:
-                if item_input['type'] != 'contagem':
-                    print(f"Valor {item_input['tag']}: {item_input.get('value', 'Não Identificado')} ")
-            
-            print(f"People in room: {self.people_in_room}")
-            
-            #for temp_sensor in self.temperature_sensor:
-                #print(f"Valor {temp_sensor['tag']}: {temp_sensor.get('value', 'Não Identificado')}")
+        signal.signal(signal.SIGINT, handler_signal)
 
-            print(f"People in the building: {self.people_in_room}")
-
-        time.sleep(4)
-        return
-
-    def room_control(self):
-        print("Deseja acionar um dispositivo em qual das salas:")
-        for key, value in self.client_rooms.items():
-            print (value, '--', key)
-
-        print(f"{len(self.client_rooms)} -- Acionar dispositivo no prédio")
+        old_inputs = list(range(0, len(self.client_data)))
+        old_outputs = list(range(0, len(self.client_data)))
 
         while True:
-            try:
-                option = int(input('Escolha uma das opções acima \n'))
-                if option >= 0 and option <= len(self.client_rooms):
-                    break
-                else:
-                    print(f'Digite um número entre 0 e {len(self.client_rooms)}')
-            except:
-                print('Opção inválida. Digite um número')
-        
-        return option
-    
-    def control_menu(self, room, menu):
-        for key in menu.keys():
-            print (key, '--', menu[key])
-        
-        option = ''
-        
-        try:
-            option = int(input('Escolha uma das opções acima \n'))
-        except:
-            print('Opção inválida. Digite um número')
+            for i in range(len(self.client_data)):
+                if old_outputs[i] != str(self.outputs[i]) or old_inputs[i] != str(self.inputs[i]):
+                    print(f"Sistema {self.client_data[i][0]}")
 
-        if option == 0:
-            self.modify_device_status(option, room)
-        elif option == 1:
-            self.modify_device_status(option, room)
-        elif option == 2:
-            self.modify_device_status(option, room)
-        elif option == 3:
-            self.modify_device_status(option, room)
-        elif option == 4:
-            self.modify_system_alarm_status()
-        elif option == 5:
-            self.modify_fire_alarm_status()
-        else:
-            return
+                    for item_output in self.outputs[i]:
+                        print(f"Valor {item_output['tag']}: {item_output.get('value', 'False')}")
+                    
+                    for item_input in self.inputs[i]:
+                        if item_input['type'] != 'contagem':
+                            print(f"Valor {item_input['tag']}: {item_input.get('value', 'Não Identificado')} ")
+                    
+                    print(f"People in room: {self.people_in_room[i]}")
+                    
+                    for temp_sensor in self.temperature_sensor[i]:
+                        print(f"Temperatura: {temp_sensor.get('temp', 'Não Identificado')}")
+                        print(f"Umidade: {temp_sensor.get('humidity', 'Não Identificado')}")
 
-    def turn_on_turn_off(self):
-        print("0 - Desligar")
-        print("1 - Ligar")
-        result = input("Escolha uma das opções acima.\n")
+                    print(f"People in the building: {self.people_in_building}")
+                    print()
+                    print("Aperte Ctlr C para voltar ao menu principal")
+                    print()
 
-        if int(result) == 0:
-            return False
+                    old_outputs[i] = str(self.outputs[i])
+                    old_inputs[i] = str(self.inputs[i])
 
-        elif int(result) == 1:
-            return True
-        else:
-            print("Valor inválido")
-            return -1
-
-    def modify_device_status(self, option, room):
-        value = self.turn_on_turn_off()
-        if value != -1:
-            self.outputs[room][option]['value'] = value
-            print(self.outputs[room][option])
-            send_data_to_client(self.outputs[room][option], self.client_data[room][1], self.client_data[room][2])
-
-    def modify_system_alarm_status(self):
-        pass
-
-    def modify_fire_alarm_status(self):
-        pass
+            time.sleep(1)
 
 
 if __name__=='__main__':
-    f = open('ConfigurationFiles/initial_state.json')
-    data = json.load(f)
-
-    dist = Central(data)
+    Central()
